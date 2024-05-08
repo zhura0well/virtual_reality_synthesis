@@ -9,6 +9,10 @@ let lightLine;
 let moveU = 0.9;
 let moveV = 0.2;
 let camera;
+let background;
+let video;
+let defTexture;
+let vidTexture;
 
 function deg2rad(angle) {
     return angle * Math.PI / 180;
@@ -186,6 +190,13 @@ function draw() {
     gl.uniform1f(shProgram.iScale, s);
     gl.uniform2fv(shProgram.iTranslateTo, [moveU, moveV])
 
+    modelViewProjection = m4.identity();
+    gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, modelViewProjection);
+    reinitVideoTexture();
+    background.Draw();
+    gl.bindTexture(gl.TEXTURE_2D, defTexture);
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+
     camera.ApplyLeftFrustum();
     modelViewProjection = m4.multiply(camera.ProjectionMatrix, m4.multiply(camera.ModelViewMatrix, matAccum1));
     gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, modelViewProjection);
@@ -200,10 +211,11 @@ function draw() {
     gl.colorMask(false, true, true, false);
     surface.Draw();
     gl.colorMask(true, true, true, true);
+    
 }
 
 function drawUsingAnimFrame() {
-    camera.Convergence = parseFloat(document.getElementById('convergence').value);
+       camera.Convergence = parseFloat(document.getElementById('convergence').value);
     camera.EyeSeparation = parseFloat(document.getElementById('eyesep').value);
     camera.FOV = parseFloat(document.getElementById('fov').value);
     camera.NearClippingDistance = parseFloat(document.getElementById('near').value);
@@ -316,6 +328,7 @@ function loadAndBindTexture() {
         );
         draw();
     }
+    return texture;
 }
 
 
@@ -358,6 +371,12 @@ function initGL() {
     lightSphere.SetNormalBuffer(CreateSphereData());
     lightSphere.SetNormalBuffer(CreateSphereData());
     lightSphere.SetTextureBuffer(CreateSphereData());
+
+    background = new Model('Background');
+    background.BufferData([1, 1, 0, -1, -1, 0, -1, 1, 0, -1, -1, 0, 1, 1, 0, 1, -1, 0]);
+    background.SetNormalBuffer([1, 1, 0, -1, -1, 0, -1, 1, 0, -1, -1, 0, 1, 1, 0, 1, -1, 0]);
+    background.SetTextureBuffer([0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1]);
+
 
     gl.enable(gl.DEPTH_TEST);
 }
@@ -403,7 +422,8 @@ function init() {
     try {
         canvas = document.getElementById("webglcanvas");
         gl = canvas.getContext("webgl");
-        loadAndBindTexture();
+        defTexture = loadAndBindTexture();
+        vidTexture = initVideoTexture();
         if (!gl) {
             throw "Browser does not support WebGL";
         }
@@ -425,4 +445,38 @@ function init() {
     spaceball = new TrackballRotator(canvas, draw, 0);
 
     drawUsingAnimFrame();
+    video = initVideo()
+}
+function initVideoTexture() {
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return texture;
+}
+
+function initVideo() {
+    const video = document.createElement('video');
+    navigator.getUserMedia({ video: true, audio: false }, function (stream) {
+        video.srcObject = stream;
+    }, function (e) {
+        console.log('err', e);
+    });
+    video.setAttribute('autoplay', true);
+    return video;
+}
+function reinitVideoTexture() {
+    gl.bindTexture(gl.TEXTURE_2D, vidTexture);
+    if (video) {
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            video
+        );
+    }
 }
