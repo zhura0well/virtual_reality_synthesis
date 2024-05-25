@@ -13,6 +13,7 @@ let background;
 let video;
 let defTexture;
 let vidTexture;
+let context, audio, audioSrc, biquadFilter, panner, checkbox;
 
 function deg2rad(angle) {
     return angle * Math.PI / 180;
@@ -196,6 +197,19 @@ function draw() {
     background.Draw();
     gl.bindTexture(gl.TEXTURE_2D, defTexture);
     gl.clear(gl.DEPTH_BUFFER_BIT);
+
+    if (panner) {
+        const step = 0.001;
+        const time = Date.now()
+        const x = Math.sin(time * step)
+        const z = Math.cos(time * step)
+
+        panner.setPosition(x, 0, z)
+        modelViewProjection = m4.multiply(m4.identity(), m4.translation(x, 0, z));
+        gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, modelViewProjection);
+        lightSphere.Draw();
+        gl.clear(gl.DEPTH_BUFFER_BIT);
+    }
 
     camera.ApplyLeftFrustum();
     modelViewProjection = m4.multiply(camera.ProjectionMatrix, m4.multiply(camera.ModelViewMatrix, matAccum1));
@@ -446,6 +460,7 @@ function init() {
 
     drawUsingAnimFrame();
     video = initVideo()
+    initAudio();
 }
 function initVideoTexture() {
     const texture = gl.createTexture();
@@ -479,4 +494,40 @@ function reinitVideoTexture() {
             video
         );
     }
+}
+
+function initAudio() {
+    audio = document.getElementById('audio');
+
+    audio.addEventListener('play', () => {
+        if (!context) {
+            context = new AudioContext();
+            audioSrc = context.createMediaElementSource(audio);
+            panner = context.createPanner();
+            biquadFilter = context.createBiquadFilter();
+
+            audioSrc.connect(panner);
+            panner.connect(biquadFilter);
+            biquadFilter.connect(context.destination);
+
+            biquadFilter.type = 'highpass';
+            biquadFilter.Q.value = 5;
+            biquadFilter.frequency.value = 1000;
+
+            context.resume();
+        }
+    })
+
+    audio.addEventListener('pause', () => context.resume())
+    checkbox = document.getElementById('check-filter');
+    checkbox.addEventListener('change', () => {
+        if (checkbox.checked) {
+            panner.disconnect();
+            panner.connect(biquadFilter);
+            biquadFilter.connect(context.destination);
+        } else {
+            panner.disconnect();
+            panner.connect(context.destination);
+        }
+    });
 }
